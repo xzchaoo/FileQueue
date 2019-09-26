@@ -15,17 +15,17 @@ import java.util.Objects;
  */
 @SuppressWarnings("WeakerAccess")
 // @NotThreadSafe
-public class SingleThreadFileQueue implements FileQueue {
+public class SpscFileQueue implements FileQueue {
     public static final long DEFAULT_FILE_SIZE = 64 * 1024 * 1024L;
 
-    private static final Logger LOGGER       = LoggerFactory.getLogger(SingleThreadFileQueue.class);
-    private static final int    OS_PAGE_SIZE = 4096;
-    private static final byte   EMPTY        = 0;
-    private static final byte   DATA         = 1;
-    private static final byte   END          = 2;
+    private static final Logger LOGGER = LoggerFactory.getLogger(SpscFileQueue.class);
+    private static final int OS_PAGE_SIZE = 4096;
+    private static final byte EMPTY = 0;
+    private static final byte DATA = 1;
+    private static final byte END = 2;
 
     private final long fileSize;
-    private final int  maxAllowedDataFileCount;
+    private final int maxAllowedDataFileCount;
 
     /**
      * 数据目录
@@ -61,11 +61,11 @@ public class SingleThreadFileQueue implements FileQueue {
      */
     private volatile MappedByteBuffer readerBuffer;
 
-    public SingleThreadFileQueue(File dir) throws IOException {
+    public SpscFileQueue(File dir) throws IOException {
         this(dir, DEFAULT_FILE_SIZE, -1);
     }
 
-    public SingleThreadFileQueue(File dir, long fileSize, int maxAllowedDataFileCount) throws IOException {
+    public SpscFileQueue(File dir, long fileSize, int maxAllowedDataFileCount) throws IOException {
         this.dir = Objects.requireNonNull(dir);
         // TODO 2^n 保证
         this.fileSize = fileSize;
@@ -108,7 +108,8 @@ public class SingleThreadFileQueue implements FileQueue {
         }
 
         int remain = writerBuffer.capacity() - writerBuffer.position();
-        if (remain < 5 + data.length) {
+        // 刚好等于也要换文件 因为每个文件一定会以END结尾
+        if (remain <= 5 + data.length) {
             meta.switchToNextWriteFile();
         }
         writerBuffer.put(DATA);
@@ -262,10 +263,10 @@ public class SingleThreadFileQueue implements FileQueue {
     }
 
     private class Meta {
-        final File             writerMetaFile;
+        final File writerMetaFile;
         final MappedByteBuffer writerMetaBuffer;
 
-        final File             readerMetaFile;
+        final File readerMetaFile;
         final MappedByteBuffer readerMetaBuffer;
 
         Meta() throws IOException {
@@ -353,10 +354,10 @@ public class SingleThreadFileQueue implements FileQueue {
 
         public void log() {
             LOGGER.info("writerFileIndex={} readerFileIndex={} writerBuffer.position={} readerBuffer.position={}",
-                    writerFileIndex,
-                    readerFileIndex,
-                    writerBuffer.position(),
-                    readerBuffer.position()
+                writerFileIndex,
+                readerFileIndex,
+                writerBuffer.position(),
+                readerBuffer.position()
             );
         }
     }

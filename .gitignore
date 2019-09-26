@@ -121,3 +121,5 @@ fabric.properties
 /other/learn-log/learn-log4j2/logs/
 /new/antlr/gen/
 *.log.gz
+
+ignore_me/
