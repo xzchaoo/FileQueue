@@ -1,5 +1,7 @@
 package com.xzchaoo.filequeue.core;
 
+import java.nio.ByteBuffer;
+
 /**
  * 是否线程安全需要看具体的子类
  *
@@ -14,20 +16,53 @@ public interface FileQueue {
     void enqueue(byte[] data);
 
     /**
+     * 入队
+     *
+     * @param data
+     */
+    void enqueue(byte[] data, int offset, int length);
+
+    /**
+     * 入队
+     *
+     * @param data
+     */
+    void enqueue(ByteBuffer data);
+
+    /**
      * 出队
      *
      * @return 出队的数据, 如果没有则返回null
      */
     byte[] dequeue();
 
-    boolean skip();
-
     /**
-     * 检查
+     * 出队, 返回ByteBuffer
      *
      * @return
      */
+    ByteBuffer dequeueByteBuffer();
+
+    /**
+     * 跳过下一个元素
+     *
+     * @return
+     */
+    boolean skip();
+
+    /**
+     * peek下一个元素
+     *
+     * @return 下一个byte[], 如果不存在则返回null
+     */
     byte[] peek();
+
+    /**
+     * peek下一个元素
+     *
+     * @return 下一个ByteBuffer, 如果不存在则返回null
+     */
+    ByteBuffer peekByteBuffer();
 
     /**
      * 队列里是否有数据
