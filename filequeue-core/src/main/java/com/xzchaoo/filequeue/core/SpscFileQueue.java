@@ -10,55 +10,64 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * TODO 加入CRC功能 可以使用Disruptor来加速! 基于文件系统的Queue. 非线程安全的, 如果并发访问, 需要自己在外部进行同步. 另外Queue的使用场景都是"顺序", 理论上并发并不会快多少.
+ * A SPSC (Single Producer Single Consumer) style File Queue implementation.
+ * This SpscFileQueue can be used by two threads concurrently. One for reade and another for write.
+ * One thread reads data from file head, and another thread writes data to file tail.
+ * Data is written to files having fixed file size of {@link #fileSize }, but logically acts as a serialized big array.
+ * <ul>
+ * <li>CRC32 check</li>
+ * </ul>
  *
  * @author xzchaoo
  */
 @SuppressWarnings("WeakerAccess")
 // @NotThreadSafe
 public class SpscFileQueue extends AbstractFileQueue {
-    private static final Logger            LOGGER                     = LoggerFactory.getLogger(SpscFileQueue.class);
+    private static final Logger            LOGGER            = LoggerFactory.getLogger(SpscFileQueue.class);
     /**
-     * 默认数据文件大小
+     * Default file size.
      */
-    public static final  long              DEFAULT_FILE_SIZE          = 64 * 1024 * 1024L;
+    public static final  long              DEFAULT_FILE_SIZE = 64 * 1024 * 1024L;
     /**
-     * 空记录的标记
+     * Mark for EMPTY data.
      */
-    private static final byte              MARK_EMPTY                 = 0;
+    private static final byte              MARK_EMPTY        = 0;
     /**
-     * 数据记录的标记
+     * Mark for DATA data.
      */
-    private static final byte              MARK_DATA                  = 1;
+    private static final byte              MARK_DATA         = 1;
     /**
-     * 结束标记
+     * Mark for End data.
      */
-    private static final byte              MARK_END                   = 2;
-    private static final byte[]            SKIP_MARK_DATA             = new byte[0];
-    private static final ByteBuffer        SKIP_MARK_DATA_BYTE_BUFFER = ByteBuffer.allocate(0);
+    private static final byte              MARK_END          = 2;
+    /**
+     * A special var as a hint of EMPTY data.
+     */
+    private static final byte[]            SKIP_MARK_DATA    = new byte[0];
     private              SpscFileQueueSpec spec;
     /**
-     * 数据文件大小
+     * File size.
      */
     private              long              fileSize;
     /**
-     * 最大允许的文件数
+     * Max allowed data file count. When files in disk exceeds this value, it will throws an exception when try to switch to next data
+     * file.
      */
     private              int               maxAllowedDataFileCount;
     /**
-     * 单条数据最大大小
+     * Max data size.
      */
     private              int               maxDataSize;
     /**
-     * 元信息
+     * Meta data.
      */
     private              FileQueueMeta     meta;
     /**
-     * 写buffer
+     * Writer buffer.
      */
     private volatile     MappedByteBuffer  writerBuffer;
     /**
-     * 读buffer
+     * Reader buffer.
      */
     private volatile     MappedByteBuffer  readerBuffer;
 
@@ -84,6 +93,12 @@ public class SpscFileQueue extends AbstractFileQueue {
         init(spec);
     }
 
+    /**
+     * Initialize this FileQueue.
+     *
+     * @param spec
+     * @throws IOException
+     */
     private void init(SpscFileQueueSpec spec) throws IOException {
         this.spec = Objects.requireNonNull(spec);
         File dir = Objects.requireNonNull(spec.getDir());
@@ -110,6 +125,9 @@ public class SpscFileQueue extends AbstractFileQueue {
         readerBuffer = this.meta.openReaderBuffer(fileSize);
     }
 
+    /**
+     * Log meta position for debug.
+     */
     public void log() {
         LOGGER.info("fileIndex={}+{}={} index={}+{}={}",
                 meta.getReaderFileIndex(),
@@ -119,14 +137,6 @@ public class SpscFileQueue extends AbstractFileQueue {
                 meta.getWriterIndex() - meta.getReaderIndex(),
                 meta.getWriterIndex()
         );
-    }
-
-    private MappedByteBuffer map(File file, boolean readonly) {
-        try {
-            return FileUtils.map(file, readonly, fileSize);
-        } catch (IOException e) {
-            throw new IllegalStateException("Fail to map file " + file, e);
-        }
     }
 
     @Override
@@ -144,6 +154,11 @@ public class SpscFileQueue extends AbstractFileQueue {
         writerBuffer.putInt(length);
         writerBuffer.put(data);
         meta.incrementWriter(writerBuffer.position());
+    }
+
+    @Override
+    public byte[] dequeue() {
+        return doDequeue(false, false);
     }
 
     private void switchToNextWriterFile() {
@@ -164,12 +179,7 @@ public class SpscFileQueue extends AbstractFileQueue {
         writerBuffer = meta.openWriterBuffer(fileSize);
     }
 
-    @Override
-    public ByteBuffer dequeueByteBuffer() {
-        return doDequeueByteBuffer(false, false);
-    }
-
-    private ByteBuffer doDequeueByteBuffer(boolean skip, boolean peek) {
+    private byte[] doDequeue(boolean skip, boolean peek) {
         if (!hasData()) {
             return null;
         }
@@ -186,7 +196,7 @@ public class SpscFileQueue extends AbstractFileQueue {
                     throw new IllegalStateException("期望有数据却遇到EMPTY");
                 case MARK_DATA:
                     int oldPosition = readerBuffer.position();
-                    ByteBuffer data;
+                    byte[] data;
                     ByteBufferUtils.skip(readerBuffer, 1);
                     int dataLength = readerBuffer.getInt();
                     int remaining = readerBuffer.remaining();
@@ -195,12 +205,12 @@ public class SpscFileQueue extends AbstractFileQueue {
                         throw new IllegalStateException("Data is broken");
                     }
                     if (skip) {
-                        data = SKIP_MARK_DATA_BYTE_BUFFER;
+                        data = SKIP_MARK_DATA;
+                        ByteBufferUtils.skip(readerBuffer, dataLength);
                     } else {
-                        data = readerBuffer.slice();
-                        data.limit(dataLength);
+                        data = new byte[dataLength];
+                        readerBuffer.get(data);
                     }
-                    ByteBufferUtils.skip(readerBuffer, dataLength);
                     if (peek) {
                         readerBuffer.position(oldPosition);
                     } else {
@@ -218,12 +228,12 @@ public class SpscFileQueue extends AbstractFileQueue {
 
     @Override
     public boolean skip() {
-        return doDequeueByteBuffer(true, false) == SKIP_MARK_DATA_BYTE_BUFFER;
+        return doDequeue(true, false) == SKIP_MARK_DATA;
     }
 
     @Override
-    public ByteBuffer peekByteBuffer() {
-        return doDequeueByteBuffer(false, true);
+    public byte[] peek() {
+        return doDequeue(false, true);
     }
 
     private void switchToNextReadFile() {

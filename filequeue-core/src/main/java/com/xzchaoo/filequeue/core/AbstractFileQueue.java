@@ -16,14 +16,4 @@ public abstract class AbstractFileQueue implements FileQueue {
     public void enqueue(byte[] data, int offset, int length) {
         enqueue(ByteBuffer.wrap(data, offset, length));
     }
-
-    @Override
-    public byte[] dequeue() {
-        return ByteBufferUtils.readAllToByteArray(dequeueByteBuffer());
-    }
-
-    @Override
-    public byte[] peek() {
-        return ByteBufferUtils.readAllToByteArray(peekByteBuffer());
-    }
 }
