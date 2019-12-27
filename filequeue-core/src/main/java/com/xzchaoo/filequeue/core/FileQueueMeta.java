@@ -17,7 +17,7 @@ public class FileQueueMeta {
     private static final int              OS_PAGE_SIZE = 4096;
     private final        File             dir;
     private final        File             writerMetaFile;
-    private final        MappedByteBuffer writerMetaBuffer;
+    private              MappedByteBuffer writerMetaBuffer;
     /**
      * 写索引
      */
@@ -27,7 +27,7 @@ public class FileQueueMeta {
      */
     volatile             long             writerIndex;
     private final        File             readerMetaFile;
-    private final        MappedByteBuffer readerMetaBuffer;
+    private              MappedByteBuffer readerMetaBuffer;
     /**
      * 读文件的索引
      */
@@ -176,5 +176,12 @@ public class FileQueueMeta {
             throw new IllegalStateException(e);
         }
         return mbb;
+    }
+
+    public void close() {
+        FileUtils.unmap(readerMetaBuffer);
+        FileUtils.unmap(writerMetaBuffer);
+        readerMetaBuffer = null;
+        writerMetaBuffer = null;
     }
 }

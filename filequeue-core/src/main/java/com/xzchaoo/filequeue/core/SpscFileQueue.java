@@ -259,6 +259,11 @@ public class SpscFileQueue extends AbstractFileQueue {
     @Override
     public void close() {
         flush();
+        meta.close();
+        FileUtils.unmap(readerBuffer);
+        FileUtils.unmap(writerBuffer);
+        readerBuffer = null;
+        writerBuffer = null;
     }
 
     public FileQueueMeta getMeta() {

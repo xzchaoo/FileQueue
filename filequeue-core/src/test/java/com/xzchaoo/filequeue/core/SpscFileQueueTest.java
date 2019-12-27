@@ -34,6 +34,14 @@ public class SpscFileQueueTest {
         q.enqueue(new byte[] {1, 2, 3});
         q.dequeue();
         q.close();
+
+        FileQueueMeta meta = new FileQueueMeta(dir);
+        assertThat(meta.readerFileIndex).isEqualTo(0);
+        assertThat(meta.writerFileIndex).isEqualTo(0);
+        assertThat(meta.readerIndex).isEqualTo(4);
+        assertThat(meta.writerIndex).isEqualTo(4);
+        assertThat(meta.getReaderFileOffset()).isEqualTo(32);
+        assertThat(meta.getWriterFileOffset()).isEqualTo(32);
     }
 
     @Test
