@@ -31,20 +31,21 @@ class FileUtils {
     }
 
     static MappedByteBuffer map(File file, boolean readonly, long length) throws IOException {
+        // RandomAccessFile 和 FileChannel 都可以关闭 并不会影响 MappedByteBuffer
         try ( RandomAccessFile raf = new RandomAccessFile(file, readonly ? "r" : "rw") ) {
             if (!readonly) {
                 raf.setLength(length);
             }
             try ( FileChannel channel = raf.getChannel() ) {
                 return channel.map(readonly ? FileChannel.MapMode.READ_ONLY : FileChannel.MapMode.READ_WRITE,
-                        0, length);
+                    0, length);
             }
         }
     }
 
     static void tryDelete(File file) {
         if (!file.delete()) {
-            LOGGER.warn("fail to delete file {}", file);
+            LOGGER.warn("Fail to delete file {}", file);
         }
     }
 }

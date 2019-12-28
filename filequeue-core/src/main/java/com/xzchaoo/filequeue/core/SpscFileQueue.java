@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.FileFilter;
 import java.io.IOException;
 import java.nio.MappedByteBuffer;
 import java.util.Objects;
@@ -75,6 +76,10 @@ public class SpscFileQueue implements FileQueue {
         // ensure directory exists
         if (!dir.exists() && !dir.mkdirs()) {
             LOGGER.warn("fail to mkdirs {}", dir);
+        }
+
+        if (!dir.isDirectory()) {
+            throw new IllegalStateException(dir + " is not a directory");
         }
 
         this.meta = new Meta();
@@ -243,8 +248,8 @@ public class SpscFileQueue implements FileQueue {
      * 删除所有 < readerFileIndex 的文件
      */
     private void deleteUnusedFiles() {
-        File[] files = dir.listFiles(f -> f.isFile() && f.getName().endsWith(".data"));
-        if (files == null) {
+        File[] files = dir.listFiles(DataFileFilter.INSTANCE);
+        if (files == null || files.length == 0) {
             return;
         }
         for (File file : files) {
@@ -376,5 +381,14 @@ public class SpscFileQueue implements FileQueue {
 
     public long getReaderIndex() {
         return readerIndex;
+    }
+
+    private static class DataFileFilter implements FileFilter {
+        public static final DataFileFilter INSTANCE = new DataFileFilter();
+
+        @Override
+        public boolean accept(File file) {
+            return file.isFile() && file.getName().endsWith(".data");
+        }
     }
 }
